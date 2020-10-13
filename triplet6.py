@@ -46,7 +46,7 @@ class TripletDataset(Dataset):
 
     def read_image(self, path):
         image = Image.open(path)
-        print(image.size)
+        image = image.convert('RGB')
         image = self.transform(image)
         return image
 
