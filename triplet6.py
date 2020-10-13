@@ -119,8 +119,8 @@ class StyleNet(nn.Module):
         components = (eigenvectors[:, :k]).t()
         projection = torch.mm(X, components.t())
         return projection
-
     """
+    
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
@@ -136,7 +136,7 @@ class StyleNet(nn.Module):
         output = pca.fit_transform(output)
         output = torch.from_numpy(output)
         return output
-    """
+
 
 class ContentNet(nn.Module):
     def __init__(self):
