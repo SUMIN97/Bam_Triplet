@@ -106,7 +106,7 @@ class StyleNet(nn.Module):
         sample_by_component = component_by_sample.T
         return sample_by_component
 
-    def PCA_eig(X,k, center=True, scale=False):
+    def PCA_eig(self, X,k, center=True, scale=False):
         n,p = X.size()
         ones = torch.ones(n).view([n,1])
         h = ((1/n) * torch.mm(ones, ones.t())) if center  else torch.zeros(n*n).view([n,n])
@@ -115,16 +115,18 @@ class StyleNet(nn.Module):
         covariance = 1/(n-1) * torch.mm(X_center.t(), X_center).view(p,p)
         scaling =  torch.sqrt(1/torch.diag(covariance)).double() if scale else torch.ones(p).double()
         scaled_covariance = torch.mm(torch.diag(scaling).view(p,p), covariance)
+        print(scaled_covariance)
         eigenvalues, eigenvectors = torch.eig(scaled_covariance, True)
         components = (eigenvectors[:, :k]).t()
         projection = torch.mm(X, components.t())
         return projection
-    """
+    
     
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
-        output = self.PCA_eig(output, n_components, center = True, scale = False)
+        print(output.size())
+        output = self.PCA_eig(output, n_components,center = True,scale = False)
         return output
     """
     def forward(self, x):
@@ -136,7 +138,7 @@ class StyleNet(nn.Module):
         output = pca.fit_transform(output)
         output = torch.from_numpy(output)
         return output
-
+    """
 
 class ContentNet(nn.Module):
     def __init__(self):
@@ -181,7 +183,7 @@ class ContentNet(nn.Module):
         return output3
 
 use_cuda = torch.cuda.is_available()
-kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
+#kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 margin = 1
 lr = 1e-4
 n_epochs = 30
@@ -190,7 +192,7 @@ transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])  # 0~1값을 -0.5~0.5로 변경
 ])
-n_components = 10
+n_components = 8
 
 # cuda = False
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -213,7 +215,7 @@ for epoch in range(n_epochs):
     
     for folder in folders:
         dataset = TripletDataset(folder, transform, folders)
-        loader = DataLoader(dataset, batch_size = n_components, shuffle= True, **kwargs)
+        loader = DataLoader(dataset, batch_size = n_components, shuffle= True)
 
         train_loss = 0.0
         for batch_idx, (anchor, postive, negative) in enumerate(tqdm(loader)):
