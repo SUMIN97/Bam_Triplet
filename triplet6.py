@@ -13,6 +13,7 @@ from torch.autograd import Variable
 from sklearn.decomposition import PCA
 import h5py
 from glob import glob
+from torch.autograd import Variable
 
 
 torch.cuda.empty_cache()
@@ -79,7 +80,7 @@ class StyleNet(nn.Module):
             nn.Conv2d(512, 512, 3, padding=1), nn.LeakyReLU(0.2),
             nn.MaxPool2d(2, 2),
             # 512 14 8
-            nn.Conv2d(512, 128, 3, padding=1)
+            nn.Conv2d(512, 64, 3, padding=1)
         )
 
     def gram_and_flatten(self, x):
@@ -131,21 +132,26 @@ class StyleNet(nn.Module):
         projection = torch.mm(X, components.t())
         return projection
     
-    def PCA_svd(self, X, k, center=True):  
+    def PCA_svd(self, X, k, center=True):
         n = X.size()[0]
-        ones = torch.ones(n).view([n,1])
-        h = ((1/n) * torch.mm(ones, ones.t())) if center  else torch.zeros(n*n).view([n,n])
-        H = torch.eye(n) - h
-        X_center =  torch.mm(H.double().cuda(), X.double())
+
+        X_center = Variable(torch.empty(n, X.size()[1]), requires_grad=True)
+        ones = Variable(torch.ones(n).view([n,1]), requires_grad=True)
+        h = Variable((1/n) * torch.mm(ones, ones.t()), requires_grad=True) if center  else torch.zeros(n*n).view([n,n])
+        H = Variable(torch.eye(n) - h, requires_grad= True)
+        X_center =  Variable(torch.mm(H.double().cuda(), X.double()), requires_grad=True)
         u, s, v = torch.svd(X_center)
+        # u = Variable(u, requires_grad=True)
+        # s = Variable(u, requires_grad=True)
+        # v = Variable(u, requires_grad=True)
         u *= s[:k]
+        u = Variable(u, requires_grad=True)
         return u
 
 
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
-        print(output.size())
         output = self.PCA_svd(output, n_components, True)
         return output
     """
@@ -212,10 +218,14 @@ n_components = 32
 
 # cuda = False
 device = torch.device("cuda:0" if use_cuda else "cpu")
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0, 1, 2, 3'
 print("use cuda", use_cuda,"device", device)
 
 style_model = StyleNet()
+style_mocel = nn.DataParallel(style_model)
 content_model = ContentNet()
+content_model = nn.DataParallel(content_model)
+
 if use_cuda:
     style_model.cuda()
     content_model.cuda()
@@ -242,6 +252,7 @@ for epoch in range(n_epochs):
 
         train_loss = 0.0
         for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
+            torch.cuda.empty_cache()
             if use_cuda:
                 anchor = anchor.cuda()
                 positive = positive.cuda()
@@ -250,14 +261,19 @@ for epoch in range(n_epochs):
             anchor = torch.cat((style_model(anchor).double(), content_model(anchor).double()), dim = 1)
             A = style_model(positive).double()
             B = content_model(positive).double()
-            print(A.type(), B.type())
+            print("positive", A.type(), B.type())
             positive = torch.cat((A, B), dim=1)
             # positive = torch.cat((style_model(positive).double(), content_model(positive).double(), dim=1)
-            negative = torch.cat((style_model(negative).double(), content_model(negative)).double(), dim=1)
+            A = style_model(negative).double()
+            B = content_model(negative).double()
+            print("negative", A.type(), B.type())
+            negative = torch.cat((A, B), dim=1)
+
+            # negative = torch.cat((style_model(negative).double(), content_model(negative)).double(), dim=1)
 
             dis_pos = (anchor - positive).pow(2).sum().pow(.5)
             dis_neg = (anchor - negative).pow(2).sum().pow(.5)
-            loss = torch.max(dis_pos - dis_neg + margin, torch.zeros(1))
+            loss = torch.max(dis_pos - dis_neg + margin, torch.tensor([0.0], dtype = torch.double).cuda())
 
 
             train_loss += loss.item()
