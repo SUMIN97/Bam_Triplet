@@ -108,25 +108,48 @@ class StyleNet(nn.Module):
 
     def PCA_eig(self, X,k, center=True, scale=False):
         n,p = X.size()
+        print(X)
         ones = torch.ones(n).view([n,1])
         h = ((1/n) * torch.mm(ones, ones.t())) if center  else torch.zeros(n*n).view([n,n])
         H = torch.eye(n) - h
         X_center =  torch.mm(H.double(), X.double())
+        print("X_center", X_center)
         covariance = 1/(n-1) * torch.mm(X_center.t(), X_center).view(p,p)
+        print("convariance", covariance)
         scaling =  torch.sqrt(1/torch.diag(covariance)).double() if scale else torch.ones(p).double()
-        scaled_covariance = torch.mm(torch.diag(scaling).view(p,p), covariance)
+        print("scaling", scaling)
+        A = torch.diag(scaling).view(p,p)
+        print("A", A)
+        print("A size", A.size(), "covariance size", covariance.size())
+        scaled_covariance = torch.empty(p,p)
+        scaled_covariance = torch.mm(A, covariance)
+        
         print(scaled_covariance)
         eigenvalues, eigenvectors = torch.eig(scaled_covariance, True)
         components = (eigenvectors[:, :k]).t()
         projection = torch.mm(X, components.t())
         return projection
     
+    def PCA_svd(self, X, k, center=True):  
+        n = X.size()[0]
+        ones = torch.ones(n).view([n,1])
+        h = ((1/n) * torch.mm(ones, ones.t())) if center  else torch.zeros(n*n).view([n,n])
+        H = torch.eye(n) - h
+        X_center =  torch.mm(H.double(), X.double())
+        print(X_center.type())
+        print(X_center.size())
+        print(X_center)
+        u, s, v = torch.svd(X_center) 
+        components  = v[:k].t()
+        print(components.size())
+        explained_variance = torch.mul(s[:k], s[:k])/(n-1)
+        return { 'X':X, 'k':k, 'components':components, 'explained_variance':explained_variance } 
     
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
         print(output.size())
-        output = self.PCA_eig(output, n_components,center = True,scale = False)
+        output = self.PCA_svd(output, n_components, True)
         return output
     """
     def forward(self, x):
