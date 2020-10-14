@@ -135,18 +135,27 @@ class StyleNet(nn.Module):
     def PCA_svd(self, X, k, center=True):
         n = X.size()[0]
 
-        X_center = Variable(torch.empty(n, X.size()[1]), requires_grad=True)
-        ones = Variable(torch.ones(n).view([n,1]), requires_grad=True)
-        h = Variable((1/n) * torch.mm(ones, ones.t()), requires_grad=True) if center  else torch.zeros(n*n).view([n,n])
-        H = Variable(torch.eye(n) - h, requires_grad= True)
-        X_center =  Variable(torch.mm(H.double().cuda(), X.double()), requires_grad=True)
+        # X_center = Variable(torch.empty(n, X.size()[1]), requires_grad=True)
+        # ones = Variable(torch.ones(n).view([n,1]), requires_grad=True)
+        # h = Variable((1/n) * torch.mm(ones, ones.t()), requires_grad=True) if center  else torch.zeros(n*n).view([n,n])
+        # H = Variable(torch.eye(n) - h, requires_grad= True)
+        # X_center =  Variable(torch.mm(H.double().cuda(), X.double()), requires_grad=True)
+
+
+        ones = torch.ones(n).view([n,1])
+        # ones = Variable(ones, requires_grad=True)
+        h = (1/n) * torch.mm(ones, ones.t()) if center  else torch.zeros(n*n).view([n,n])
+        # h = Variable(h, requires_grad=True)
+        H = torch.eye(n) - h
+        # H= Variable(H, requires_grad=True)
+        X_center =  torch.mm(H.double().cuda(), X.double())
+        # X_center = Variable(X_center, requires_grad=True)
         u, s, v = torch.svd(X_center)
+        u = u[:, :k]
+        x_new = u * s[:k]
+        # s = Variable(s, requires_grad=True)
         # u = Variable(u, requires_grad=True)
-        # s = Variable(u, requires_grad=True)
-        # v = Variable(u, requires_grad=True)
-        u *= s[:k]
-        u = Variable(u, requires_grad=True)
-        return u
+        return x_new
 
 
     def forward(self, x):
@@ -214,7 +223,8 @@ use_cuda = torch.cuda.is_available()
 margin = 1
 lr = 1e-4
 n_epochs = 30
-n_components = 32
+n_components = 8#32
+batch_size = n_components
 
 # cuda = False
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -222,9 +232,9 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 print("use cuda", use_cuda,"device", device)
 
 style_model = StyleNet()
-style_mocel = nn.DataParallel(style_model)
+# style_mocel = nn.DataParallel(style_model)
 content_model = ContentNet()
-content_model = nn.DataParallel(content_model)
+# content_model = nn.DataParallel(content_model)
 
 if use_cuda:
     style_model.cuda()
@@ -248,9 +258,9 @@ for epoch in range(n_epochs):
     
     for folder in folders:
         dataset = TripletDataset(folder, transform, folders)
-        loader = DataLoader(dataset, batch_size = n_components, shuffle= True)
+        loader = DataLoader(dataset, batch_size = batch_size, shuffle= True)
 
-        train_loss = 0.0
+        correct = 0
         for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
             torch.cuda.empty_cache()
             if use_cuda:
@@ -261,26 +271,30 @@ for epoch in range(n_epochs):
             anchor = torch.cat((style_model(anchor).double(), content_model(anchor).double()), dim = 1)
             A = style_model(positive).double()
             B = content_model(positive).double()
-            print("positive", A.type(), B.type())
+            # print("positive", A.type(), B.type())
             positive = torch.cat((A, B), dim=1)
             # positive = torch.cat((style_model(positive).double(), content_model(positive).double(), dim=1)
             A = style_model(negative).double()
             B = content_model(negative).double()
-            print("negative", A.type(), B.type())
+            # print("negative", A.type(), B.type())
             negative = torch.cat((A, B), dim=1)
 
             # negative = torch.cat((style_model(negative).double(), content_model(negative)).double(), dim=1)
 
-            dis_pos = (anchor - positive).pow(2).sum().pow(.5)
-            dis_neg = (anchor - negative).pow(2).sum().pow(.5)
-            loss = torch.max(dis_pos - dis_neg + margin, torch.tensor([0.0], dtype = torch.double).cuda())
 
+            dis_pos = (anchor - positive).pow(2).sum(dim = 1).pow(.5)
+            dis_neg = (anchor - negative).pow(2).sum(dim = 1).pow(.5)
+            b = dis_pos.size()
+            losses = torch.max((dis_pos - dis_neg + margin), torch.zeros(b).double().cuda())
 
-            train_loss += loss.item()
+            count= (losses == torch.zeros(b).double().cuda()).sum().item()
+            print(count)
+            correct += count
 
             style_opimizer.zero_grad()
             content_opimizer.zero_grad()
-            loss.backward()
+            sum_losses = losses.sum()
+            sum_losses.backward()
 
             is_okay_to_optimize = True
             for param in style_model.parameters():
@@ -298,7 +312,7 @@ for epoch in range(n_epochs):
             if is_okay_to_optimize:
                 style_opimizer.step()
                 content_opimizer.step()
-        print("train_loss", train_loss)
+        print("correct", correct)
 
 
 
