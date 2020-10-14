@@ -14,6 +14,7 @@ from sklearn.decomposition import PCA
 import h5py
 from glob import glob
 
+
 torch.cuda.empty_cache()
 
 class TripletDataset(Dataset):
@@ -135,16 +136,12 @@ class StyleNet(nn.Module):
         ones = torch.ones(n).view([n,1])
         h = ((1/n) * torch.mm(ones, ones.t())) if center  else torch.zeros(n*n).view([n,n])
         H = torch.eye(n) - h
-        X_center =  torch.mm(H.double(), X.double())
-        print(X_center.type())
-        print(X_center.size())
-        print(X_center)
-        u, s, v = torch.svd(X_center) 
-        components  = v[:k].t()
-        print(components.size())
-        explained_variance = torch.mul(s[:k], s[:k])/(n-1)
-        return { 'X':X, 'k':k, 'components':components, 'explained_variance':explained_variance } 
-    
+        X_center =  torch.mm(H.double().cuda(), X.double())
+        u, s, v = torch.svd(X_center)
+        u *= s[:k]
+        return u
+
+
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
@@ -162,6 +159,7 @@ class StyleNet(nn.Module):
         output = torch.from_numpy(output)
         return output
     """
+
 
 class ContentNet(nn.Module):
     def __init__(self):
@@ -210,12 +208,7 @@ use_cuda = torch.cuda.is_available()
 margin = 1
 lr = 1e-4
 n_epochs = 30
-transform = transforms.Compose([
-    transforms.Resize([224, 224]),
-    transforms.ToTensor(),
-    transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])  # 0~1값을 -0.5~0.5로 변경
-])
-n_components = 8
+n_components = 32
 
 # cuda = False
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -230,29 +223,39 @@ if use_cuda:
 style_opimizer = optim.Adam(list(style_model.parameters()), lr = lr)
 content_opimizer = optim.Adam(list(content_model.parameters()), lr = lr)
 
+transform = transforms.Compose([
+    transforms.Resize([224, 224]),
+    transforms.ToTensor(),
+    transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])  # 0~1값을 -0.5~0.5로 변경
+])
+
 
 for epoch in range(n_epochs):
     print("epoch", epoch)
     #Train
-    folders = glob(os.path.join('/home/ubuntu/artri/Bam_Triplet/BAM', '*'))
+    folders = glob(os.path.join('/home/lab/Documents/SWMaestro/AWS/Bam_Triplet/BAM', '*'))
+    # folders = glob(os.path.join('/home/ubuntu/artri/Bam_Triplet/BAM', '*'))
     
     for folder in folders:
         dataset = TripletDataset(folder, transform, folders)
         loader = DataLoader(dataset, batch_size = n_components, shuffle= True)
 
         train_loss = 0.0
-        for batch_idx, (anchor, postive, negative) in enumerate(tqdm(loader)):
-            print(anchor.size())
+        for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
             if use_cuda:
                 anchor = anchor.cuda()
-                positive = postive.cuda()
+                positive = positive.cuda()
                 negative = negative.cuda()
 
-            anchor = torch.cat((style_model(anchor), content_model(anchor)), dim = 1)
-            postive = torch.cat((style_model(postive), content_model(postive)), dim=1)
-            negative = torch.cat((style_model(negative), content_model(negative)), dim=1)
+            anchor = torch.cat((style_model(anchor).double(), content_model(anchor).double()), dim = 1)
+            A = style_model(positive).double()
+            B = content_model(positive).double()
+            print(A.type(), B.type())
+            positive = torch.cat((A, B), dim=1)
+            # positive = torch.cat((style_model(positive).double(), content_model(positive).double(), dim=1)
+            negative = torch.cat((style_model(negative).double(), content_model(negative)).double(), dim=1)
 
-            dis_pos = (anchor - postive).pow(2).sum().pow(.5)
+            dis_pos = (anchor - positive).pow(2).sum().pow(.5)
             dis_neg = (anchor - negative).pow(2).sum().pow(.5)
             loss = torch.max(dis_pos - dis_neg + margin, torch.zeros(1))
 
