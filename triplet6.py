@@ -144,14 +144,6 @@ class StyleNet(nn.Module):
     
     def PCA_svd(self, X, k, center=True):
         n = X.size()[0]
-
-        # X_center = Variable(torch.empty(n, X.size()[1]), requires_grad=True)
-        # ones = Variable(torch.ones(n).view([n,1]), requires_grad=True)
-        # h = Variable((1/n) * torch.mm(ones, ones.t()), requires_grad=True) if center  else torch.zeros(n*n).view([n,n])
-        # H = Variable(torch.eye(n) - h, requires_grad= True)
-        # X_center =  Variable(torch.mm(H.double().cuda(), X.double()), requires_grad=True)
-
-
         ones = torch.ones(n).view([n,1])
         # ones = Variable(ones, requires_grad=True)
         h = (1/n) * torch.mm(ones, ones.t()) if center  else torch.zeros(n*n).view([n,n])
@@ -171,8 +163,8 @@ class StyleNet(nn.Module):
     def forward(self, x):
         output = self.conv(x)
         output = self.gram_and_flatten(output)
-        # output = self.PCA_svd(output, n_components, True)
-        output = self.PCA_svd(output, 1, True) #좌
+        output = self.PCA_svd(output, n_components, True)
+        # output = self.PCA_svd(output, 1, True) #좌
         return output
     """
     def forward(self, x):
@@ -217,8 +209,8 @@ class ContentNet(nn.Module):
             nn.MaxPool2d(2, 2)
         )
         self.avg_pool = nn.AvgPool2d(7)
-        # self.fc1 = nn.Linear(512, n_components)
-        self.fc1 = nn.Linear(512, 1) #y좌표
+        self.fc1 = nn.Linear(512, n_components)
+        # self.fc1 = nn.Linear(512, 1) #y좌표
 
     def forward(self, x):
         # output1 = self.convnet(x)
@@ -236,7 +228,7 @@ use_cuda = torch.cuda.is_available()
 #kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 margin = 1
 lr = 1e-4
-n_epochs = 10
+n_epochs = 30
 
 n_components = 16#32
 batch_size = n_components
@@ -268,7 +260,7 @@ transform = transforms.Compose([
 
 for epoch in range(n_epochs):
     #Train
-    folders = sorted(glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test', '*')))
+    folders = sorted(glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/BAM', '*')))
     # folders = glob(os.path.join('/home/ubuntu/artri/Bam_Triplet/BAM', '*'))
     total_correct = 0
 
@@ -324,18 +316,18 @@ for epoch in range(n_epochs):
                 style_opimizer.step()
                 content_opimizer.step()
 
-        percent = correct / len(dataset) * 100
-        print("correct: {}/{} ({}%)".format(correct, len(dataset), str(percent)))
+        percent = 100. * correct / len(dataset)
+        print("correct: {}/{} ({:.0f}%)".format(correct, len(dataset), percent))
         total_correct += correct
     print("epoch", epoch, 'total_correct', total_correct)
 
-# colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f','#bcbd22',
-#           '#17becf', '#C0392B ', '#E74C3C ', '#9B59B6 ', '#8E44AD ', '#2980B9 ', '#3498DB ', '#1ABC9C', '#16A085 ',
-#             '#27AE60', '#2ECC71 ', '#F1C40F', '#F39C12', '#E67E22', '#D35400 ', '#BDC3C7','#839192 ', '#34495E ',
-#             '#2C3E50', '#FE2EF7', '#F5A9A9', '#F5D0A9', '#BCF5A9', '#A9F5F2', '#A9BCF5','#BCA9F5', '#D7DF01',
-#             '#DF0101', '#088A68', '#3B240B', '#610B21', '#BF00FF', '#08298A', '#DF01A5','#F781BE', '#58FA58',
-#             '#5F04B4', '#0489B1', '#6E6E6E', '#000000', '#2E2E2E', '#210B61', '#FA8258','#FF4000', '#DF7401',
-#             '#F7BE81', '#F2F5A9', '#58FAD0', '#A9F5BC', '#CD5C5C', '#DC143C', '	#FF6347','#FFD700', '#BDB76B	',]
+save_path = './model_epoch30.pth'
+torch.save({
+            'style_state_dict': style_model.state_dict(),
+            'content_state_dict': content_model.state_dict(),
+            'optimizerA_state_dict': style_opimizer.state_dict(),
+            'optimizerB_state_dict': content_opimizer.state_dict(),
+            }, save_path)
 
 # https://html-color-codes.info/    content 가 같으면 같은색
 # Bicycle : 빨
@@ -350,15 +342,7 @@ for epoch in range(n_epochs):
 #
 # 명도: (흰) 3dgraphic > comic > oil > pen > pencil > vectorart > watercolor
 
-# rgba_color = np.array(
-#     [255, 0, 0, 0.2],   [255, 112, 0, 0.2], [255, 255, 0, 0.2], [0, 255, 0, 0.2], [0, 255, 199, 0.2], [0, 0, 255, 0.2], [138, 0, 255, 0.2], [249, 0, 255, 0.2], [21, 22, 14, 0.2],
-#     [255, 0, 0, 0.3],   [255, 112, 0, 0.3], [255, 255, 0, 0.3], [0, 255, 0, 0.3], [0, 255, 199, 0.3], [0, 0, 255, 0.3] [138, 0, 255, 0.3], [249, 0, 255, 0.3], [21, 22, 14, 0.3],
-#     [255, 0, 0, 0.4],   [255, 112, 0, 0.4], [255, 255, 0, 0.4], [0, 255, 0, 0.4], [0, 255, 199, 0.4], [0, 0, 255, 0.4], [138, 0, 255, 0.4], [249, 0, 255, 0.4], [21, 22, 14, 0.4],
-#     [255, 0, 0, 0.6],   [255, 112, 0, 0.6], [255, 255, 0, 0.6], [0, 255, 0, 0.6], [0, 255, 199, 0.6], [0, 0, 255, 0.6], [138, 0, 255, 0.6], [249, 0, 255, 0.6], [21, 22, 14, 0.6],
-#     [255, 0, 0, 0.7],   [255, 112, 0, 0.7], [255, 255, 0, 0.7], [0, 255, 0, 0.7], [0, 255, 199, 0.7], [0, 0, 255, 0.7], [138, 0, 255, 0.7], [249, 0, 255, 0.7], [21, 22, 14, 0.7],
-#     [255, 0, 0, 0.8],   [255, 112, 0, 0.8], [255, 255, 0, 0.8], [0, 255, 0, 0.8], [0, 255, 199, 0.8], [0, 0, 255, 0.8], [138, 0, 255, 0.8], [249, 0, 255, 0.8], [21, 22, 14, 0.8],
-#     [255, 0, 0, 1.0],   [255, 112, 0, 1], [255, 255, 0, 1.0], [0, 255, 0, 1.0], [0, 255, 199, 1.0], [0, 0, 255, 1.0], [138, 0, 255, 1.0], [249, 0, 255, 1.0], [21, 22, 14, 1.0]
-# )
+
 
 
 #9로 나눈 몫
@@ -386,8 +370,8 @@ color_dict = {
 }
 
 plt.figure(figsize=(20,20))
-xmin  = ymin = 100000000000000
-xmax = ymax = -1000000000000
+
+print("\n\nThis is test:\n\n")
 with torch.no_grad():
     style_model.eval()
     content_model.eval()
@@ -397,29 +381,42 @@ with torch.no_grad():
         dataset = TripletDataset(folder, transform, folders)
         loader = DataLoader(dataset, batch_size = batch_size, shuffle= True)
 
-
-
         correct = 0
         for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
             torch.cuda.empty_cache()
             if use_cuda:
                 anchor = anchor.cuda()
+                positive = positive.cuda()
+                negative = negative.cuda()
 
-            b = anchor.size()[0]
+            anchor = torch.cat((style_model(anchor).double(), content_model(anchor).double()), dim = 1)
+            A = style_model(positive).double()
+            B = content_model(positive).double()
+            # print("positive", A.type(), B.type())
+            positive = torch.cat((A, B), dim=1)
+            # positive = torch.cat((style_model(positive).double(), content_model(positive).double(), dim=1)
+            A = style_model(negative).double()
+            B = content_model(negative).double()
+            # print("negative", A.type(), B.type())
+            negative = torch.cat((A, B), dim=1)
 
-            x = style_model(anchor).double().cpu()
-            y = content_model(anchor).double().cpu()
+            dis_pos = (anchor - positive).pow(2).sum(dim = 1).pow(.5)
+            dis_neg = (anchor - negative).pow(2).sum(dim = 1).pow(.5)
+            b = dis_pos.size()[0]
 
-            if (x > xmax): xmax = x
-            if (x < xmin): xmin = x
-            if (y > ymax): ymax = y
-            if (y < ymin): ymin = y
+            losses = F.relu(dis_pos - dis_neg + margin)
+            count = (losses == torch.zeros(b).cuda()).sum()
+            correct += count
 
-            for i in range(b):
-                plt.scatter(x[i], y[i], s = 20,color = color_dict[idx %9]/255, alpha = alpha_dict[int(idx/9)])
-    plt.axis([xmin, xmax, ymin, ymax])
+        percent = 100. * correct / len(dataset)
+        print("correct: {}/{} ({:.0f}%)".format(correct, len(dataset), percent))
+            # for i in range(b):
+            #     plt.scatter(x[i], y[i], s = 20,color = color_dict[idx %9]/255, alpha = alpha_dict[int(idx/9)])
+    # plt.axis([xmin, xmax, ymin, ymax])
     plt.show()
     plt.savefig("result1.png")
+
+
 
 
 
