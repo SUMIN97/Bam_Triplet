@@ -173,7 +173,7 @@ style_opimizer = optim.Adam(list(style_model.parameters()), lr = lr)
 content_opimizer = optim.Adam(list(content_model.parameters()), lr = lr)
 
 transform = transforms.Compose([
-    transforms.Resize([224, 224]),
+    # transforms.Resize([224, 224]),
     # transforms.CenterCrop(224),
     transforms.ToTensor(),
     transforms.Normalize(mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225])  # 0~1값을 -0.5~0.5로 변경
@@ -181,10 +181,11 @@ transform = transforms.Compose([
 
 for epoch in range(n_epochs):
     # Train화
-    folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/유화/인물화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/유화/동물화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/유화/풍경화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/유화/정물', '*'))
+    folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/인물화', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/동물화', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/풍경화', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/정물화', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/추상화', '*'))
 
     dataset = TripletDataset(transform, folders)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -218,18 +219,25 @@ for epoch in range(n_epochs):
         count = (losses == torch.zeros(b).to(device)).sum()
         correct += count
         losses_sum = losses.sum()
+
+        style_opimizer.zero_grad()
+        content_optimizer.zero_grad()
+
         losses_sum.backward()
+
         is_okay_to_optimize = True
         for param in style_model.parameters():
-            a = param.grad.view(-1)[:10]
+            a = param.grad.view(-1)
             if torch.isnan(a).sum() > 0:
                 is_okay_to_optimize = False
+                print("grad nan")
                 break;
 
         for param in content_model.parameters():
-            a = param.grad.view(-1)[:10]
+            a = param.grad.view(-1)
             if torch.isnan(a).sum() > 0:
                 is_okay_to_optimize = False
+                print("grad nan")
                 break
 
         if is_okay_to_optimize:
