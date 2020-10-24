@@ -221,7 +221,7 @@ for epoch in range(n_epochs):
         losses_sum = losses.sum()
 
         style_opimizer.zero_grad()
-        content_optimizer.zero_grad()
+        content_opimizer.zero_grad()
 
         losses_sum.backward()
 
