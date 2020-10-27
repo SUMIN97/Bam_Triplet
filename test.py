@@ -90,7 +90,7 @@ class StyleNet(nn.Module):
         conv_list[-1] = nn.Conv2d(512, 32, 3, padding=1)
         self.convnet = nn.Sequential(*conv_list)
 
-        self.fc = nn.Linear(32*32, n_components)
+
 
     def gram_and_flatten(self, x):
         batch, c, h, w = x.size()  # a=batch size(=1)
@@ -99,6 +99,7 @@ class StyleNet(nn.Module):
         return mul.view(batch, -1)  # (batch, 512 * 512)
 
     def sumin_pca(self, X, k):
+
         u, s, v = torch.pca_lowrank(X, center=True)
         return torch.mm(X, v[:, :k])
 
@@ -122,8 +123,8 @@ class StyleNet(nn.Module):
         output = self.convnet(x)
         output = self.gram_and_flatten(output)
         # print(output.size())
-        # output = self.fc(output)
-        output = self.PCA_svd(output, n_components)
+        output = self.sumin_pca(output, n_components)
+        # output = self.PCA_svd(output, n_components)
         return output
 
 
@@ -171,7 +172,7 @@ use_cuda = torch.cuda.is_available()
 # use_cuda = False
 margin = 0.
 lr = 1e-3
-n_epochs = 30
+n_epochs = 50
 n_components = 8
 batch_size = 8
 
@@ -208,6 +209,14 @@ transform = transforms.Compose([
 
 cos = nn.CosineSimilarity(dim=1, eps=1e-6)
 
+folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Bicycle', '*'))
+folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Dog', '*'))
+folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Bicycle', '*'))
+folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Dog', '*'))
+dataset = TripletDataset(transform, folders)
+loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+
+
 for epoch in range(n_epochs):
     # Train화
     # folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/인물화', '*'))
@@ -215,14 +224,6 @@ for epoch in range(n_epochs):
     # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/풍경화', '*'))
     # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/정물화', '*'))
     # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/추상화', '*'))
-    folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Bicycle', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Dog', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Bicycle', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Dog', '*'))
-
-
-    dataset = TripletDataset(transform, folders)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     correct = 0
     for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
@@ -252,41 +253,57 @@ for epoch in range(n_epochs):
         #         dis_neg = (anchor - negative).pow(2).sum(dim=1)
         b = dis_pos.size()[0]
 
-        losses = F.relu(dis_pos - dis_neg + margin)
+        # losses = F.relu(dis_pos - dis_neg)
+        losses = torch.max(torch.zeros(b).double().to(device), dis_pos - dis_neg)
+
 
         count = (losses == torch.zeros(b).to(device)).sum()
         correct += count
-        losses_sum = losses.sum()
+        # losses_sum = losses.sum()
+        losses_mean = torch.mean(losses)
 
-        style_optimizer.zero_grad()
-        content_optimizer.zero_grad()
+        # style_optimizer.zero_grad()
+        # content_optimizer.zero_grad()
+        style_model.zero_grad()
+        content_model.zero_grad()
 
-        losses_sum.backward()
+        losses_mean.backward()
 
         is_okay_to_optimize = True
         for idx, param in enumerate(style_model.parameters()):
-            if param.grad == None: continue
             grad = param.grad.view(-1)
-            # print("style", idx, grad[:5])
             if torch.isnan(grad).sum() > 0:
                 is_okay_to_optimize = False
                 print("style", idx, "grad nan")
-                break;
+        if is_okay_to_optimize == False:
+            print(losses)
+            for idx, param in enumerate(style_model.parameters()):
+                print(param)
 
         for idx, param in enumerate(content_model.parameters()):
             grad = param.grad.view(-1)
             # print("content", idx, grad[:5])
             if torch.isnan(grad).sum() > 0:
                 is_okay_to_optimize = False
-                print("style", idx, "grad nan")
+                print("content", idx, "grad nan")
                 break
 
         if is_okay_to_optimize:
             style_optimizer.step()
             content_optimizer.step()
+        else:
+            break
 
     percent = 100. * correct / len(dataset)
     print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(dataset), percent))
+
+save_path = './model_epoch50.pth'
+torch.save({
+            'style_state_dict': style_model.state_dict(),
+            'content_state_dict': content_model.state_dict(),
+            'optimizerA_state_dict': style_optimizer.state_dict(),
+            'optimizerB_state_dict': content_optimizer.state_dict(),
+            }, save_path)
 
 
 
