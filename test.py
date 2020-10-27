@@ -15,6 +15,7 @@ from glob import glob
 import matplotlib
 import matplotlib.pyplot as plt
 from torchvision.models import vgg16
+from torch import autograd
 
 torch.cuda.empty_cache()
 
@@ -113,18 +114,17 @@ class StyleNet(nn.Module):
         try:
             u, s, v = torch.svd(X_center)
         except:
-            print(X_center)
+
             u, s, v = torch.svd(X_center + 1e-4 * X_center.mean())
-        u = u[:, :k]
-        x_new = u * s[:k]
+        x_new = torch.mm(X, v[:, :k].float())
         return x_new
 
     def forward(self, x):
         output = self.convnet(x)
         output = self.gram_and_flatten(output)
         # print(output.size())
-        output = self.sumin_pca(output, n_components)
-        # output = self.PCA_svd(output, n_components)
+        # output = self.sumin_pca(output, n_components)
+        output = self.PCA_svd(output, n_components)
         return output
 
 
@@ -173,8 +173,8 @@ use_cuda = torch.cuda.is_available()
 margin = 0.
 lr = 1e-3
 n_epochs = 50
-n_components = 8
-batch_size = 8
+n_components = 6
+batch_size = 6
 
 device = torch.device("cuda:0" if use_cuda else "cpu")
 print("use cuda", use_cuda, "device", device)
@@ -218,6 +218,8 @@ loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
 
 for epoch in range(n_epochs):
+
+
     # Train화
     # folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/인물화', '*'))
     # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/동물화', '*'))
@@ -228,6 +230,7 @@ for epoch in range(n_epochs):
     correct = 0
     for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
         torch.cuda.empty_cache()
+
         if use_cuda:
             anchor = anchor.to(device)
             positive = positive.to(device)
@@ -261,11 +264,14 @@ for epoch in range(n_epochs):
         correct += count
         # losses_sum = losses.sum()
         losses_mean = torch.mean(losses)
+        # print(losses_mean.item())
+
 
         # style_optimizer.zero_grad()
         # content_optimizer.zero_grad()
         style_model.zero_grad()
         content_model.zero_grad()
+
 
         losses_mean.backward()
 
@@ -297,7 +303,7 @@ for epoch in range(n_epochs):
     percent = 100. * correct / len(dataset)
     print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(dataset), percent))
 
-save_path = './model_epoch50.pth'
+save_path = './model_epoch50_v2.pth'
 torch.save({
             'style_state_dict': style_model.state_dict(),
             'content_state_dict': content_model.state_dict(),
