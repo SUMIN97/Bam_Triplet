@@ -181,11 +181,10 @@ transform = transforms.Compose([
 
 for epoch in range(n_epochs):
     # Train화
-    folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/인물화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/동물화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/풍경화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/정물화', '*'))
-    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/추상화', '*'))
+    folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/동양화/','*', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/유화', '*', '*'))
+    folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/수채화', '*', '*'))
+
 
     dataset = TripletDataset(transform, folders)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
