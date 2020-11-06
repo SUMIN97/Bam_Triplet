@@ -26,7 +26,9 @@ class TripletV2Dataset(Dataset):
         self.n_imgs = len(self.imgs_path)
         self.relation = []
 
-        for index in range(self.n_imgs):
+        print("makeing relation")
+        for index in tqdm(range(self.n_imgs)):
+
             anchor_path = self.imgs_path[index]
             anchor_material = anchor_path.split('/')[-1].split('_')[0]
             anchor_author = anchor_path.split('/')[-1].split('_')[1]
@@ -42,11 +44,13 @@ class TripletV2Dataset(Dataset):
                 #material, author 모두 같은 경우
                 while True:
                     negative_path = self.imgs_path[np.random.randint(self.n_imgs)]
-                    material = positive_path.split('/')[-1].split('_')[0]
-                    author = positive_path.split('/')[-1].split('_')[1]
-                    if (material != anchor_material) and (author != anchor_author): break
-                self.relation.append(anchor_path, positive_path, negative_path)
+                    material = negative_path.split('/')[-1].split('_')[0]
+                    author = negative_path.split('/')[-1].split('_')[1]
+                    if (material != anchor_material) and (author != anchor_author):
+                        break
 
+                self.relation.append([anchor_path, positive_path, negative_path])
+        print("finish making relation")
         random.shuffle(self.relation)
 
     def __getitem__(self, index):
