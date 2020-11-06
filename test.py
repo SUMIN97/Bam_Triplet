@@ -1,21 +1,19 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-
-Image.MAX_IMAGE_PIXELS = None
-import numpy as np
-import torchvision
-from torchvision import transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision
+from torchvision import transforms
+from torchvision.models import vgg16
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
+import numpy as np
 import os
 from tqdm import tqdm
 from glob import glob
 import matplotlib
 import matplotlib.pyplot as plt
-from torchvision.models import vgg16
-from torch import autograd
 
 torch.cuda.empty_cache()
 
@@ -36,14 +34,14 @@ class TripletDataset(Dataset):
             positive_path = self.imgs_path[np.random.randint(self.n_imgs)]
             p_material = positive_path.split('/')[-1].split('_')[0]
             p_author = positive_path.split('/')[-1].split('_')[1]
-            if p_material == anchor_material or p_author == anchor_author:
+            if p_material == anchor_material and p_author == anchor_author:
                 break
 
         while True:
             negative_path = self.imgs_path[np.random.randint(self.n_imgs)]
             n_material = negative_path.split('/')[-1].split('_')[0]
             n_author = negative_path.split('/')[-1].split('_')[1]
-            if (n_material != anchor_material) and (n_author != anchor_author):
+            if (n_material != anchor_material) or (n_author != anchor_author):
                 break
 
         anchor = self.read_image(anchor_path)
@@ -122,10 +120,10 @@ use_cuda = torch.cuda.is_available()
 margin = 0.
 lr = 1e-3
 n_epochs = 50
-n_components = 6
-batch_size = 6
+n_components = 16
+batch_size = 16
 
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:1" if use_cuda else "cpu")
 print("use cuda", use_cuda, "device", device)
 
 style_model = StyleNet()
@@ -136,10 +134,7 @@ content_model = ContentNet()
 
 for idx, param in enumerate(style_model.parameters()):
     print("style", idx, param.size())
-#
-#
-# for idx, param in enumerate(content_model.parameters()):
-#     print("content", idx, param.size())
+
 
 
 if use_cuda:
@@ -150,32 +145,22 @@ style_optimizer = optim.Adam(list(style_model.parameters()), lr=lr)
 content_optimizer = optim.Adam(list(content_model.parameters()), lr=lr)
 
 transform = transforms.Compose([
-    transforms.Resize([224, 224]),
-    # transforms.CenterCrop(224),
+    # transforms.Resize([224, 224]),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # 0~1값을 -0.5~0.5로 변경
 ])
 
 cos = nn.CosineSimilarity(dim=1, eps=1e-6)
 
-folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Bicycle', '*'))
-folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/3DGraphics_Dog', '*'))
-folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Bicycle', '*'))
-folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/test/Watercolor_Dog', '*'))
+# folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/동양화/', '*', '*'))
+folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_Resize_224', '*'))
+
+
 dataset = TripletDataset(transform, folders)
 loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
 
 for epoch in range(n_epochs):
-
-
-    # Train화
-    # folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/인물화', '*'))
-    # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/동물화', '*'))
-    # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/풍경화', '*'))
-    # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/정물화', '*'))
-    # folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio_v2/Resize_224/oil/추상화', '*'))
-
     correct = 0
     for batch_idx, (anchor, positive, negative) in enumerate(tqdm(loader)):
         torch.cuda.empty_cache()
@@ -190,19 +175,16 @@ for epoch in range(n_epochs):
         B = content_model(positive).double()
 
         positive = torch.cat((A, B), dim=1)
-        # positive = torch.cat((style_model(positive).double(), content_model(positive).double(), dim=1)
+
         A = style_model(negative).double()
         B = content_model(negative).double()
 
         negative = torch.cat((A, B), dim=1)
 
-        # negative = torch.cat((style_model(negative).double(), content_model(negative)).double(), dim=1)
 
         dis_pos = 1 - cos(anchor, positive)
         dis_neg = 1 - cos(anchor, negative)
 
-        #         dis_pos = (anchor - positive).pow(2).sum(dim=1)
-        #         dis_neg = (anchor - negative).pow(2).sum(dim=1)
         b = dis_pos.size()[0]
 
         # losses = F.relu(dis_pos - dis_neg)
@@ -252,15 +234,13 @@ for epoch in range(n_epochs):
     percent = 100. * correct / len(dataset)
     print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(dataset), percent))
 
-save_path = './model_epoch50_v2.pth'
+save_path = './model_epoch100_Grapolio_유화_수채화_positive_and_negative_or.pth'
 torch.save({
             'style_state_dict': style_model.state_dict(),
             'content_state_dict': content_model.state_dict(),
             'optimizerA_state_dict': style_optimizer.state_dict(),
             'optimizerB_state_dict': content_optimizer.state_dict(),
             }, save_path)
-
-
 
 
 

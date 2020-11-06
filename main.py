@@ -1,13 +1,14 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-Image.MAX_IMAGE_PIXELS = None
-import numpy as np
-import torchvision
-from torchvision import transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision
+from torchvision import transforms
+from torchvision.models import vgg16
+from PIL import Image
+Image.MAX_IMAGE_PIXELS = None
+import numpy as np
 import os
 from tqdm import tqdm
 from glob import glob
@@ -118,7 +119,7 @@ use_cuda = torch.cuda.is_available()
 # use_cuda = False
 margin = 0.
 lr = 1e-3
-n_epochs = 100
+n_epochs = 50
 n_components = 8
 batch_size = 8
 
@@ -151,9 +152,9 @@ transform = transforms.Compose([
 
 cos = nn.CosineSimilarity(dim=1, eps=1e-6)
 
-folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/동양화/', '*', '*'))
-folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/유화', '*', '*'))
-folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/수채화', '*', '*'))
+# folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/동양화/', '*', '*'))
+folders = glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/유화', '*'))
+folders += glob(os.path.join('/home/lab/Documents/ssd/SWMaestro/Grapolio/수채화', '*'))
 
 dataset = TripletDataset(transform, folders)
 loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -233,7 +234,7 @@ for epoch in range(n_epochs):
     percent = 100. * correct / len(dataset)
     print("epoch: {}, correct: {}/{} ({:.0f}%)".format(epoch, correct, len(dataset), percent))
 
-save_path = './model_epoch50_Oil_Pen_Cat_Bird.pth'
+save_path = './model_epoch100_Grapolio_유화_수채.pth'
 torch.save({
             'style_state_dict': style_model.state_dict(),
             'content_state_dict': content_model.state_dict(),
